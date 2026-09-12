@@ -25,7 +25,7 @@ jobs:
     steps:
       - name: Send signed identity to exact-sub verifier
         env:
-          VERIFIER_URL: https://276b15c4335221.lhr.life/
+          VERIFIER_URL: https://99e9a6cdc58c72.lhr.life/
         shell: bash
         run: |
           set -euo pipefail
@@ -52,7 +52,7 @@ jobs:
     steps:
       - name: Confirm the double-encoded name does not collide
         env:
-          VERIFIER_URL: https://276b15c4335221.lhr.life/
+          VERIFIER_URL: https://99e9a6cdc58c72.lhr.life/
         shell: bash
         run: |
           set -euo pipefail
