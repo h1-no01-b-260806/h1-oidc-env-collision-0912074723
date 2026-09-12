@@ -1,0 +1,64 @@
+name: Protected environment OIDC collision proof
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  OIDC_AUDIENCE: h1-oidc-environment-collision
+
+jobs:
+  trusted-gate:
+    name: trusted Production:V1 (must wait)
+    runs-on: ubuntu-latest
+    environment: 'Production:V1'
+    steps:
+      - run: echo 'This step must not start before protected-environment approval.'
+
+  collision-proof:
+    name: collision Production%3AV1 (unprotected)
+    runs-on: ubuntu-latest
+    environment: 'Production%3AV1'
+    steps:
+      - name: Send signed identity to exact-sub verifier
+        env:
+          VERIFIER_URL: https://276b15c4335221.lhr.life/
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$(curl --fail --silent --show-error \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}")"
+          token="$(jq -r '.value' <<<"$response")"
+          payload="$(python3 -c 'import base64,sys; p=sys.argv[1].split(".")[1]; print(base64.urlsafe_b64decode(p + "=" * (-len(p) % 4)).decode())' "$token")"
+          jq -c '{environment,environment_node_id,sub,repository,run_id}' <<<"$payload"
+
+          status="$(curl --silent --show-error \
+            --output verifier-response.json \
+            --write-out '%{http_code}' \
+            -H "Authorization: Bearer $token" \
+            "$VERIFIER_URL")"
+          printf 'verifier_http_status=%s\n' "$status"
+          jq -c . verifier-response.json
+          test "$status" = '200'
+
+  negative-control:
+    name: negative Production%253AV1
+    runs-on: ubuntu-latest
+    environment: 'Production%253AV1'
+    steps:
+      - name: Confirm the double-encoded name does not collide
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$(curl --fail --silent --show-error \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}")"
+          token="$(jq -r '.value' <<<"$response")"
+          payload="$(python3 -c 'import base64,sys; p=sys.argv[1].split(".")[1]; print(base64.urlsafe_b64decode(p + "=" * (-len(p) % 4)).decode())' "$token")"
+          jq -c '{environment,environment_node_id,sub,repository,run_id}' <<<"$payload"
+          test "$(jq -r '.sub' <<<"$payload")" = \
+            'repo:h1-no01-b-260806@313884183/h1-oidc-env-collision-0912074723@1367077963:environment:Production%253AV1'
